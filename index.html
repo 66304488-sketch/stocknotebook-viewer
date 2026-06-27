@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>StockNotebook 备份浏览器</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3/dist/index.js"></script>
   <style>
     * { box-sizing: border-box; }
     :root {
@@ -434,6 +435,7 @@
         try {
           backupData = JSON.parse(event.target.result);
           stocks = backupData.stocks || [];
+          enrichStocks(stocks);
           selectedStockCode = stocks.length ? stocks[0].code : null;
           renderApp();
         } catch (err) {
@@ -443,7 +445,26 @@
       reader.readAsText(file);
     }
 
-    function renderApp() {
+    function enrichStocks(stocks) {
+      stocks.forEach(s => {
+        const name = s.name || '';
+        s._nameLower = name.toLowerCase();
+        if (typeof pinyinPro !== 'undefined' && pinyinPro.pinyin) {
+          try {
+            const first = pinyinPro.pinyin(name, { pattern: 'first', toneType: 'none', type: 'string', separator: '' });
+            s._nameFirst = first.toLowerCase();
+            const full = pinyinPro.pinyin(name, { toneType: 'none', type: 'string', separator: '' });
+            s._namePinyin = full.toLowerCase();
+          } catch (e) {
+            s._nameFirst = '';
+            s._namePinyin = '';
+          }
+        } else {
+          s._nameFirst = '';
+          s._namePinyin = '';
+        }
+      });
+    }
       const tags = collectTags(stocks);
       const statuses = collectValues(stocks, 'statusRaw');
       const markets = collectValues(stocks, 'marketRaw');
@@ -452,7 +473,7 @@
         <aside class="sidebar">
           <div class="filters">
             <div class="search-row">
-              <input type="text" class="search" id="searchInput" placeholder="搜索股票名称 / 代码 / 笔记内容...">
+              <input type="text" class="search" id="searchInput" placeholder="名称 / 代码 / 拼音首字母 / 笔记内容...">
               <button type="button" class="btn secondary search-btn" id="searchBtn">搜索</button>
             </div>
             <div class="filter-row">
@@ -526,9 +547,17 @@
         if (status && s.statusRaw !== status) return false;
         if (market && s.marketRaw !== market) return false;
         if (!query) return true;
+
+        // Direct matches for name / code / pinyin
+        const name = s.name || '';
+        const code = s.code || '';
+        if (name.toLowerCase().includes(query)) return true;
+        if (code.toLowerCase().includes(query)) return true;
+        if (s._nameFirst && s._nameFirst.includes(query)) return true;
+        if (s._namePinyin && s._namePinyin.includes(query)) return true;
+
+        // Broad match for tags / status / market / notes
         const hay = [
-          s.name,
-          s.code,
           s.statusRaw,
           s.marketRaw,
           (s.tagNames || []).join(' '),
