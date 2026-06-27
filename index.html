@@ -544,29 +544,44 @@
       const status = document.getElementById('statusFilter').value;
       const market = document.getElementById('marketFilter').value;
 
-      return stocks.filter(s => {
+      const filtered = stocks.filter(s => {
         if (tag && !(s.tagNames || []).includes(tag)) return false;
         if (status && s.statusRaw !== status) return false;
         if (market && s.marketRaw !== market) return false;
-        if (!query) return true;
+        return true;
+      });
 
-        // Direct matches for name / code / pinyin
-        const name = s.name || '';
-        const code = s.code || '';
-        if (name.toLowerCase().includes(query)) return true;
-        if (code.toLowerCase().includes(query)) return true;
-        if (s._nameFirst && s._nameFirst.includes(query)) return true;
-        if (s._namePinyin && s._namePinyin.includes(query)) return true;
+      if (!query) return filtered;
 
-        // Broad match for tags / status / market / notes
+      const nameMatches = [];
+      const broadMatches = [];
+
+      filtered.forEach(s => {
+        const name = (s.name || '').toLowerCase();
+        const code = (s.code || '').toLowerCase();
+        const isNameMatch =
+          name.includes(query) ||
+          code.includes(query) ||
+          (s._nameFirst && s._nameFirst.includes(query)) ||
+          (s._namePinyin && s._namePinyin.includes(query));
+
+        if (isNameMatch) {
+          nameMatches.push(s);
+          return;
+        }
+
         const hay = [
           s.statusRaw,
           s.marketRaw,
           (s.tagNames || []).join(' '),
           ...(s.notes || []).map(n => [n.title, n.content, n.typeRaw].join(' '))
         ].join(' ').toLowerCase();
-        return hay.includes(query);
+        if (hay.includes(query)) {
+          broadMatches.push(s);
+        }
       });
+
+      return nameMatches.length ? nameMatches : broadMatches;
     }
 
     function renderStockList() {
